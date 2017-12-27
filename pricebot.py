@@ -1,14 +1,17 @@
 import os
 import time
 import re
-import gdax
-from slackclient import SlackClient
 import urllib2
 from bs4 import BeautifulSoup
+import gdax
+import bitstamp.client as bsc
+from slackclient import SlackClient
+
 
 ## Slackbot to get the price of certain cryptos from www.coinmarketcap.com
 ## With help from: https://www.fullstackpython.com/blog/build-first-slack-bot-python.html
-## GDAX Puthon API: https://github.com/danpaquin/gdax-python
+## GDAX Python API: https://github.com/danpaquin/gdax-python
+## Bitstamp Python API: https://github.com/kmadac/bitstamp-python-client
 
 # instantiate Slack client
 slack_client = SlackClient(os.environ.get('SLACK_BOT_TOKEN'))
@@ -17,7 +20,6 @@ starterbot_id = None
 
 # constants
 RTM_READ_DELAY = 1 # 1 second delay between reading from RTM
-EXAMPLE_COMMAND = "help"
 MENTION_REGEX = "^<@(|[WU].+)>(.*)"
 
 def parse_bot_commands(slack_events):
@@ -51,15 +53,20 @@ def handle_command(command, channel):
 
     # Finds and executes the given command, filling in response
     response = None
-    # This is where you start to implement more commands!
-    if command.startswith(EXAMPLE_COMMAND):
+
+    if command.startswith("help"):
         response = "Type 'price' followed by the name of the crypto and I will give you the price of that currency. For example: price ripple \n"
-        response += "Or, type 'coinbase' and I will give you the current prices on Coinbase"
+        response += "Or, type 'coinbase' and I will give you the current prices on Coinbase \n"
+        response += "I even know Bitstamp prices, so type 'bitstamp' to see."
+    
+    ## Coinmarketcap prices
     if command.startswith("price"):
     	try:
     		response = get_price(command.split(" ")[1])
     	except: 
     		response = "What currency do you want to see? I know a bunch!"
+    
+    ## Coinbase prices
     if command.startswith("coinbase"):
     	slack_client.api_call(
         	"chat.postMessage",
@@ -68,6 +75,22 @@ def handle_command(command, channel):
     	)
     	response = coinbase()
 
+    ## Bitstamp prices
+    if command.startswith("bitstamp"):
+    	slack_client.api_call(
+        	"chat.postMessage",
+        	channel=channel,
+        	text="Looking at Bitstamp now!"
+    	)
+    	response = bitstamp()
+
+    ## Tell the bot what to say
+    if command.startswith("say"):
+    	try:
+    		response = command.split(" ", 1)[1]
+    	except:
+    		response = "What should I say?"
+    
     # Sends the response back to the channel
     slack_client.api_call(
         "chat.postMessage",
@@ -138,6 +161,18 @@ def coinbase():
 		if str(key) == "price":
 			ltc += str(LTC[key]) + "\n"
 	return btc + bch + eth + ltc
+
+## Get the current prices from Coinbase
+def bitstamp():
+
+	public_client = bsc.Public()
+	btc = "Bitcoin is: $" + public_client.ticker_hour()['last'] + "\n"
+	bch = "Bitcoin Cash is: $" + public_client.ticker_hour('bch')['last'] + "\n"
+	eth = "Ether is: $" + public_client.ticker_hour('eth')['last'] + "\n"
+	ltc = "Litecoin is: $" + public_client.ticker_hour('ltc')['last'] + "\n"
+	xrp = "Ripple is: $" + public_client.ticker_hour('xrp')['last'] + "\n"
+	
+	return btc + bch + eth + ltc + xrp
 
 
 if __name__ == "__main__":
